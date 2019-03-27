@@ -1,9 +1,9 @@
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Copyright (c) 2012 - 2018, Anaconda, Inc. and Intake contributors
 # All rights reserved.
 #
 # The full license is in the LICENSE file, distributed with this software.
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 from intake.source.base import Schema, DataSource
 import os
@@ -15,30 +15,35 @@ from ..config import conf
 class RemoteDataFrame(RemoteSource):
     """Dataframe on an Intake server"""
 
-    name = 'remote_dataframe'
-    container = 'dataframe'
+    name = "remote_dataframe"
+    container = "dataframe"
 
     def __init__(self, url, headers, **kwargs):
         super(RemoteDataFrame, self).__init__(url, headers, **kwargs)
-        self.npartitions = kwargs['npartitions']
-        self.shape = tuple(kwargs['shape'])
-        self.metadata = kwargs['metadata']
-        self.dtype = kwargs['dtype']
-        self._schema = Schema(npartitions=self.npartitions,
-                              extra_metadata=self.metadata,
-                              dtype=self.dtype,
-                              shape=self.shape,
-                              datashape=None)
+        self.npartitions = kwargs["npartitions"]
+        self.shape = tuple(kwargs["shape"])
+        self.metadata = kwargs["metadata"]
+        self.dtype = kwargs["dtype"]
+        self._schema = Schema(
+            npartitions=self.npartitions,
+            extra_metadata=self.metadata,
+            dtype=self.dtype,
+            shape=self.shape,
+            datashape=None,
+        )
         self.dataframe = None
 
     def _load_metadata(self):
         import dask.dataframe as dd
         import dask.delayed
+
         if self.dataframe is None:
-            self.parts = [dask.delayed(get_partition)(
-                self.url, self.headers, self._source_id, self.container, i
-            )
-                          for i in range(self.npartitions)]
+            self.parts = [
+                dask.delayed(get_partition)(
+                    self.url, self.headers, self._source_id, self.container, i
+                )
+                for i in range(self.npartitions)
+            ]
             self.dataframe = dd.from_delayed(self.parts)
         return self._schema
 
@@ -75,9 +80,14 @@ class RemoteDataFrame(RemoteSource):
         try:
             from intake_parquet import ParquetSource
         except ImportError:
-            raise ImportError("Please install intake-parquet to use persistence"
-                              " on dataframe container sources.")
-        df = source.to_dask()
+            raise ImportError(
+                "Please install intake-parquet to use persistence"
+                " on dataframe container sources."
+            )
+        try:
+            df = source.to_dask()
+        except NotImplementedError:
+            df = source.read()
         df.to_parquet(path, **kwargs)
         source = ParquetSource(path, meta={})
         return source
@@ -104,15 +114,15 @@ class GenericDataFrame(DataSource):
         Passed to reader function
     """
 
-    name = 'generic_dataframe'
-    container = 'dataframe'
+    name = "generic_dataframe"
+    container = "dataframe"
 
     def __init__(self, urlpath, reader, storage_options=None, **kwargs):
         self.url = urlpath
         self.reader = reader
         self.storage_options = storage_options or {}
         kwargs = kwargs.copy()
-        super().__init__(metadata=kwargs.pop('metadata', {}))
+        super().__init__(metadata=kwargs.pop("metadata", {}))
         self.kwargs = kwargs
         self.dataframe = None
 
@@ -120,12 +130,13 @@ class GenericDataFrame(DataSource):
         import dask.dataframe as dd
         import dask.delayed
         from dask.bytes import open_files
+
         self.files = open_files(self.url, **self.storage_options)
 
         def read_a_file(open_file, reader, kwargs):
             with open_file as of:
                 df = reader(of, **kwargs)
-                df['path'] = open_file.path
+                df["path"] = open_file.path
                 return df
 
         if self.dataframe is None:
@@ -137,11 +148,13 @@ class GenericDataFrame(DataSource):
             self.npartitions = self.dataframe.npartitions
             self.shape = (None, len(self.dataframe.columns))
             self.dtype = self.dataframe.dtypes.to_dict()
-            self._schema = Schema(npartitions=self.npartitions,
-                                  extra_metadata=self.metadata,
-                                  dtype=self.dtype,
-                                  shape=self.shape,
-                                  datashape=None)
+            self._schema = Schema(
+                npartitions=self.npartitions,
+                extra_metadata=self.metadata,
+                dtype=self.dtype,
+                shape=self.shape,
+                datashape=None,
+            )
         return self._schema
 
     def _get_partition(self, i):
